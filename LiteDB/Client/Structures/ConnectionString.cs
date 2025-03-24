@@ -39,6 +39,12 @@ namespace LiteDB
         public bool ReadOnly { get; set; } = false;
 
         /// <summary>
+        /// Indicate that engine will try to crop the database file if it's not a multiple of the PAGE_SIZE. This will alter the file even if it's not a valid database file.
+        /// Set this variable to false to be sure not to alter/corrupt the file by trying to open it.
+        /// </summary>
+        public bool CropFileIfRequired { get; set; } = true;
+
+        /// <summary>
         /// "upgrade": Check if data file is an old version and convert before open (default: false)
         /// </summary>
         public bool Upgrade { get; set; } = false;
@@ -92,6 +98,7 @@ namespace LiteDB
 
             this.InitialSize = _values.GetFileSize(@"initial size", this.InitialSize);
             this.ReadOnly = _values.GetValue("readonly", this.ReadOnly);
+            this.CropFileIfRequired = _values.GetValue("crop-file", this.CropFileIfRequired);
 
             this.Collation = _values.ContainsKey("collation") ? new Collation(_values.GetValue<string>("collation")) : this.Collation;
 
@@ -115,6 +122,7 @@ namespace LiteDB
                 Password = this.Password,
                 InitialSize = this.InitialSize,
                 ReadOnly = this.ReadOnly,
+                CropFileIfRequired = this.CropFileIfRequired,
                 Collation = this.Collation,
                 Upgrade = this.Upgrade,
                 AutoRebuild = this.AutoRebuild,

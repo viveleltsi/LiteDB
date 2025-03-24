@@ -18,14 +18,16 @@ namespace LiteDB.Engine
         private readonly bool _readonly;
         private readonly bool _hidden;
         private readonly bool _useAesStream;
+        private readonly bool _cropFileIfRequired;
 
-        public FileStreamFactory(string filename, string password, bool readOnly, bool hidden, bool useAesStream = true)
+        public FileStreamFactory(string filename, string password, bool readOnly, bool hidden, bool useAesStream = true, bool cropFileIfRequired = true)
         {
             _filename = filename;
             _password = password;
             _readonly = readOnly;
             _hidden = hidden;
             _useAesStream = useAesStream;
+            _cropFileIfRequired = cropFileIfRequired;
         }
 
         /// <summary>
@@ -73,9 +75,11 @@ namespace LiteDB.Engine
             // get physical file length from OS
             var length = new FileInfo(_filename).Length;
 
+            bool fileShouldBeCropped = length % PAGE_SIZE != 0;
+
             // if file length are not PAGE_SIZE module, maybe last save are not completed saved on disk
             // crop file removing last uncompleted page saved
-            if (length % PAGE_SIZE != 0)
+            if (_cropFileIfRequired && fileShouldBeCropped)
             {
                 length = length - (length % PAGE_SIZE);
 

@@ -58,6 +58,12 @@ namespace LiteDB.Engine
         public bool ReadOnly { get; set; } = false;
 
         /// <summary>
+        /// Indicate that engine will try to crop the database file if it's not a multiple of the PAGE_SIZE. This will alter the file even if it's not a valid database file.
+        /// Set this variable to false to be sure not to alter/corrupt the file by trying to open it.
+        /// </summary>
+        public bool CropFileIfRequired { get; set; } = true;
+
+        /// <summary>
         /// After a Close with exception do a database rebuild on next open
         /// </summary>
         public bool AutoRebuild { get; set; } = false;
@@ -91,7 +97,7 @@ namespace LiteDB.Engine
             }
             else if (!string.IsNullOrEmpty(this.Filename))
             {
-                return new FileStreamFactory(this.Filename, this.Password, this.ReadOnly, false, useAesStream);
+                return new FileStreamFactory(this.Filename, this.Password, this.ReadOnly, false, useAesStream, this.CropFileIfRequired);
             }
 
             throw new ArgumentException("EngineSettings must have Filename or DataStream as data source");

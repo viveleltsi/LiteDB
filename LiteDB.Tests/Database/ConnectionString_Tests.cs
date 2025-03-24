@@ -29,11 +29,13 @@ namespace LiteDB.Tests.Database
                 @"filename=""c:\only;file\""d\""emo.db""; 
                   password =   ""john-doe "" ;
                   initial size = 10 MB ;
-                  readONLY =  TRUE;");
+                  readONLY =  TRUE;
+                  crop-file = false;");
 
             full.Filename.Should().Be(@"c:\only;file""d""emo.db");
             full.Password.Should().Be("john-doe ");
             full.ReadOnly.Should().BeTrue();
+            full.CropFileIfRequired.Should().BeFalse();
             full.InitialSize.Should().Be(10 * 1024 * 1024);
 
         }
