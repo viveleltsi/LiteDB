@@ -53,6 +53,7 @@ namespace LiteDB.Engine
             // crop file removing last uncompleted page saved
             if (length % PAGE_SIZE != 0)
             {
+                throw new Exception("SHOULD NOT CHANGE THE SIZE OF THE PAGE!!!");
                 length = length - (length % PAGE_SIZE);
 
                 _stream.SetLength(length);
