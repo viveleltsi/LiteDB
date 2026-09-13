@@ -22,8 +22,10 @@ namespace LiteDB.Tests.Engine
                 var originalData = File.ReadAllBytes(paths.Data);
                 var originalLog = File.ReadAllBytes(paths.Log);
 
-                new RebuildService(new EngineSettings { Filename = paths.Data })
-                    .Rebuild(new RebuildOptions());
+                using (var db = new LiteDatabase(paths.Data))
+                {
+                    db.Rebuild(new RebuildOptions());
+                }
 
                 File.ReadAllBytes(paths.BackupData).Should().Equal(originalData);
                 File.ReadAllBytes(paths.BackupLog).Should().Equal(originalLog);
@@ -44,13 +46,15 @@ namespace LiteDB.Tests.Engine
             {
                 CreateDatabaseWithLog(file.Filename);
 
-                new RebuildService(new EngineSettings { Filename = paths.Data })
-                    .Rebuild(new RebuildOptions { CreateBackup = false });
+                using (var db = new LiteDatabase(paths.Data))
+                {
+                    db.Rebuild(new RebuildOptions { CreateBackup = false });
+                }
 
                 File.Exists(paths.BackupData).Should().BeFalse();
                 File.Exists(paths.BackupLog).Should().BeFalse();
-                using var db = new LiteDatabase(paths.Data);
-                db.GetCollection("items").Count().Should().Be(1);
+                using var reopened = new LiteDatabase(paths.Data);
+                reopened.GetCollection("items").Count().Should().Be(1);
             }
             finally
             {
@@ -154,6 +158,46 @@ namespace LiteDB.Tests.Engine
         }
 
         [Fact]
+        public void Failed_post_replacement_validation_without_backup_keeps_original()
+        {
+            using var file = new TempFile();
+            var paths = new RebuildPaths(file.Filename);
+            var originalCollation = new Collation("en-US/IgnoreCase");
+
+            try
+            {
+                using (var created = new LiteEngine(new EngineSettings
+                {
+                    Filename = paths.Data,
+                    Collation = originalCollation
+                }))
+                {
+                    created.Insert("items", new[] { new BsonDocument { ["_id"] = 1 } }, BsonAutoId.Int32);
+                    created.Checkpoint();
+                }
+
+                var original = File.ReadAllBytes(paths.Data);
+                using var engine = new LiteEngine(new EngineSettings
+                {
+                    Filename = paths.Data,
+                    Collation = originalCollation
+                });
+                Action rebuild = () => engine.Rebuild(new RebuildOptions
+                {
+                    Collation = new Collation("en-US/None"),
+                    CreateBackup = false
+                });
+
+                rebuild.Should().Throw<LiteException>().WithMessage("*collation*");
+                File.ReadAllBytes(paths.BackupData).Should().Equal(original);
+            }
+            finally
+            {
+                paths.DeleteArtifacts();
+            }
+        }
+
+        [Fact]
         public void Partial_rebuild_without_backup_retains_original_files()
         {
             using var file = new TempFile();
@@ -172,7 +216,8 @@ namespace LiteDB.Tests.Engine
                     PageID = 1
                 });
 
-                new RebuildService(new EngineSettings { Filename = paths.Data }).Rebuild(options);
+                var result = new RebuildService(new EngineSettings { Filename = paths.Data }).Rebuild(options);
+                result.Complete();
 
                 File.ReadAllBytes(paths.BackupData).Should().Equal(originalData);
                 File.ReadAllBytes(paths.BackupLog).Should().Equal(originalLog);

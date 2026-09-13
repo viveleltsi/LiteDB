@@ -45,8 +45,8 @@ namespace LiteDB.Engine
         /// Rebuild the database and retain or delete the staged data and log backups according to the options.
         /// </summary>
         /// <param name="options">Rebuild behavior and destination settings.</param>
-        /// <returns>The number of bytes saved by the rebuild.</returns>
-        public long Rebuild(RebuildOptions options)
+        /// <returns>A result that retains staged backups until the caller completes validation.</returns>
+        public RebuildResult Rebuild(RebuildOptions options)
         {
             var backupFilename = FileHelper.GetSuffixFile(_settings.Filename, "-backup", true);
             var backupLogFilename = FileHelper.GetSuffixFile(FileHelper.GetLogFile(_settings.Filename), "-backup", true);
@@ -123,13 +123,9 @@ namespace LiteDB.Engine
 
             // A rebuild with reported errors is partial. Keep the original files so
             // callers can recover data that the rebuilt database could not import.
-            if (!options.CreateBackup && options.Errors.Count == 0)
-            {
-                File.Delete(backupFilename);
-                File.Delete(backupLogFilename);
-            }
+            var deleteBackup = !options.CreateBackup && options.Errors.Count == 0;
 
-            return diff;
+            return new RebuildResult(diff, backupFilename, backupLogFilename, deleteBackup);
         }
 
         /// <summary>

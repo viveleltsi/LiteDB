@@ -27,14 +27,17 @@ namespace LiteDB.Engine
             var rebuilder = new RebuildService(_settings);
 
             // return how many bytes of diference from original/rebuild version
-            var diff = rebuilder.Rebuild(options);
+            var result = rebuilder.Rebuild(options);
 
             // re-open engine
             this.Open();
 
             _state.Disposed = false;
 
-            return diff;
+            // Delete backups only after the replacement database passes Open validation.
+            result.Complete();
+
+            return result.Difference;
         }
 
         /// <summary>

@@ -15,7 +15,8 @@ namespace LiteDB.Engine
         /// </summary>
         /// <param name="collation">Collation to use for the rebuilt database.</param>
         /// <param name="createBackup">Whether to retain the original data and log files.</param>
-        private void Recovery(Collation collation, bool createBackup = true)
+        /// <returns>The rebuild result whose cleanup must wait for validation.</returns>
+        private RebuildResult Recovery(Collation collation, bool createBackup = true)
         {
             // run build service
             var rebuilder = new RebuildService(_settings);
@@ -28,7 +29,7 @@ namespace LiteDB.Engine
             };
 
             // run rebuild process
-            rebuilder.Rebuild(options);
+            return rebuilder.Rebuild(options);
         }
     }
 }
