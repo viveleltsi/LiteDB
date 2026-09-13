@@ -1,14 +1,32 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using static LiteDB.Constants;
+using System.ComponentModel;
 
 namespace LiteDB
 {
     public partial class BsonMapper
     {
+        #region Deserialization Hooks
+
+        /// <summary>
+        /// Delegate for deserialization callback.
+        /// </summary>
+        /// <param name="sender">The BsonMapper instance that triggered the deserialization.</param>
+        /// <param name="target">The target type for deserialization.</param>
+        /// <param name="value">The BsonValue to be deserialized.</param>
+        /// <returns>The deserialized BsonValue.</returns>
+        public delegate BsonValue DeserializationCallback(BsonMapper sender, Type target, BsonValue value);
+
+        /// <summary>
+        /// Gets called before deserialization of a value
+        /// </summary>
+        public DeserializationCallback? OnDeserialization { get; set; }
+
+        #endregion Deserialization Hooks
+
         #region Basic direct .NET convert types
 
         // direct bson types
@@ -78,6 +96,15 @@ namespace LiteDB
         /// </summary>
         public object Deserialize(Type type, BsonValue value)
         {
+            if (OnDeserialization is not null)
+            {
+                var result = OnDeserialization(this, type, value);
+                if (result is not null)
+                {
+                    value = result;
+                }
+            }
+
             // null value - null returns
             if (value.IsNull) return null;
 
@@ -108,7 +135,6 @@ namespace LiteDB
             {
                 return value.AsArray;
             }
-
             // raw values to native bson values
             else if (_bsonTypes.Contains(type))
             {
@@ -177,13 +203,6 @@ namespace LiteDB
                         throw LiteException.DataTypeNotAssignable(type.FullName, actualType.FullName);
                     }
 
-                    // avoid use of "System.Diagnostics.Process" in object type definition
-                    // using String test to work in .netstandard 1.3
-                    if (actualType.FullName.Equals("System.Diagnostics.Process", StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw LiteException.AvoidUseOfProcess();
-                    }
-
                     type = actualType;
                 }
                 // when complex type has no definition (== typeof(object)) use Dictionary<string, object> to better set values
@@ -193,37 +212,47 @@ namespace LiteDB
                 }
 
                 var entity = this.GetEntityMapper(type);
+                entity.WaitForInitialization();
 
-                // initialize CreateInstance
-                if (entity.CreateInstance == null)
+                object instance = _typeInstantiator(type);
+
+                if (instance == null && entity.CreateInstance != null)
                 {
-                    entity.CreateInstance =
-                        this.GetTypeCtor(entity) ??
-                        ((BsonDocument v) => Reflection.CreateInstance(entity.ForType));
+                    instance = entity.CreateInstance(doc);
                 }
 
-                var o = _typeInstantiator(type) ?? entity.CreateInstance(doc);
-
-                if (o is IDictionary dict)
+                if (instance == null && IsSystemIndexType(type))
                 {
-                    if (o.GetType().GetTypeInfo().IsGenericType)
-                    {
-                        var k = type.GetGenericArguments()[0];
-                        var t = type.GetGenericArguments()[1];
+                    return DeserializeSystemIndex(type, doc);
+                }
 
-                        this.DeserializeDictionary(k, t, dict, value.AsDocument);
-                    }
-                    else
+                // initialize CreateInstance
+                entity.CreateInstance = entity.CreateInstance
+                    ?? GetTypeCtor(entity) 
+                    ?? ((BsonDocument _) => Reflection.CreateInstance(entity.ForType));
+
+                instance ??= entity.CreateInstance(doc);
+
+                if (instance is IDictionary dict)
+                {
+                    Type keyType = typeof(object);
+                    Type valueType = typeof(object);
+
+                    if (instance.GetType().GetTypeInfo().IsGenericType)
                     {
-                        this.DeserializeDictionary(typeof(object), typeof(object), dict, value.AsDocument);
+                        Type[] generics = type.GetGenericArguments();
+                        keyType = generics[0];
+                        valueType = generics[1];
                     }
+
+                    DeserializeDictionary(keyType, valueType, dict, value.AsDocument);
                 }
                 else
                 {
-                    this.DeserializeObject(entity, o, doc);
+                    DeserializeObject(entity, instance, doc);
                 }
 
-                return o;
+                return instance;
             }
 
             // in last case, return value as-is - can cause "cast error"
@@ -269,15 +298,56 @@ namespace LiteDB
             return enumerable;
         }
 
-        private void DeserializeDictionary(Type K, Type T, IDictionary dict, BsonDocument value)
+        private object DeserializeSystemIndex(Type type, BsonDocument value)
         {
-            var isKEnum = K.GetTypeInfo().IsEnum;
-            foreach (var el in value.GetElements())
-            {
-                var k = isKEnum ? Enum.Parse(K, el.Key) : K == typeof(Uri) ? new Uri(el.Key) : Convert.ChangeType(el.Key, K);
-                var v = this.Deserialize(T, el.Value);
+            return Activator.CreateInstance(
+                type,
+                GetSystemIndexField(value, "Value").AsInt32,
+                GetSystemIndexField(value, "IsFromEnd").AsBoolean);
+        }
 
-                dict.Add(k, v);
+        private static bool IsSystemIndexType(Type type)
+        {
+            return type.FullName == "System.Index" &&
+                type.GetTypeInfo().IsValueType &&
+                type.Assembly == typeof(object).Assembly;
+        }
+
+        private BsonValue GetSystemIndexField(BsonDocument value, string fieldName)
+        {
+            var resolvedFieldName = this.ResolveFieldName(fieldName);
+
+            if (value.TryGetValue(resolvedFieldName, out var resolvedValue))
+            {
+                return resolvedValue;
+            }
+
+            return value[fieldName];
+        }
+
+        private void DeserializeDictionary(Type keyType, Type valueType, IDictionary dict, BsonDocument value)
+        {
+            foreach (KeyValuePair<string, BsonValue> element in value.GetElements())
+            {
+                object dictKey;
+                TypeConverter keyConverter = TypeDescriptor.GetConverter(keyType);
+                if (keyConverter.CanConvertFrom(typeof(string)))
+                {
+                    // Here, we deserialize the key based on its type, even though it's a string. This is because
+                    // BsonDocuments only support string keys (not BsonValue).
+                    // However, if we deserialize the string representation, we can have pseudo-support for key types like GUID.
+                    // See https://github.com/litedb-org/LiteDB/issues/546
+                    dictKey = keyConverter.ConvertFromInvariantString(element.Key);
+                }
+                else
+                {
+                    // Some types (e.g. System.Collections.Hashtable) can't be converted using TypeDescriptor
+                    dictKey = Convert.ChangeType(element.Key, keyType);
+                }
+
+                object dictValue = Deserialize(valueType, element.Value);
+
+                dict[dictKey] = dictValue;
             }
         }
 
@@ -308,6 +378,12 @@ namespace LiteDB
             foreach (var par in ctor.GetParameters())
             {
                 var arg = this.Deserialize(par.ParameterType, value[par.Name]);
+
+                //  if name is Id and arg is null, look for _id
+                if (arg == null && StringComparer.OrdinalIgnoreCase.Equals(par.Name, "Id") && value.TryGetValue("_id", out var id))
+                {
+                    arg = this.Deserialize(par.ParameterType, id);
+                }
 
                 args.Add(arg);
             }

@@ -1,6 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -16,7 +14,7 @@ namespace LiteDB.Engine
         public DataPage(PageBuffer buffer)
             : base(buffer)
         {
-            ENSURE(this.PageType == PageType.Data, $"Page type must be data page: {PageType}");
+            ENSURE(this.PageType == PageType.Data, "Page type must be data page: {0}", PageType);
 
             if (this.PageType != PageType.Data) throw LiteException.InvalidPageType(PageType.Data, this);
         }
@@ -74,6 +72,7 @@ namespace LiteDB.Engine
         {
             foreach(var index in base.GetUsedIndexs())
             {
+                this.EnsurePageOwnership();
                 var slotPosition = BasePage.CalcPositionAddr(index);
                 var position = _buffer.ReadUInt16(slotPosition);
 
@@ -108,7 +107,7 @@ namespace LiteDB.Engine
         /// <returns>A slot number between 0 and 4</returns>
         public static byte FreeIndexSlot(int freeBytes)
         {
-            ENSURE(freeBytes >= 0, $"FreeBytes must be positive: {freeBytes}");
+            ENSURE(freeBytes >= 0, "FreeBytes must be positive: {0}", freeBytes);
 
             for (var i = 0; i < _freePageSlots.Length; i++)
             {

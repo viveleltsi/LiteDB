@@ -56,6 +56,11 @@ namespace LiteDB
         public const int AVOID_USE_OF_PROCESS = 215;
         public const int NOT_ENCRYPTED = 216;
         public const int INVALID_PASSWORD = 217;
+        public const int ILLEGAL_DESERIALIZATION_TYPE = 218;
+        public const int ENTITY_INITIALIZATION_FAILED = 219;
+        public const int MAPPER_NOT_FOUND = 220;
+        public const int MAPPING_ERROR = 221;
+        
 
         public const int INVALID_DATAFILE_STATE = 999;
 
@@ -73,15 +78,20 @@ namespace LiteDB
         }
 
         internal LiteException(int code, string message, params object[] args)
-            : base(string.Format(message, args))
+            : base(FormatMessage(message, args))
         {
             this.ErrorCode = code;
         }
 
-        internal LiteException (int code, Exception inner, string message, params object[] args)
-        : base (string.Format (message, args), inner)
+        internal LiteException(int code, Exception inner, string message, params object[] args)
+            : base(FormatMessage(message, args), inner)
         {
             this.ErrorCode = code;
+        }
+
+        private static string FormatMessage(string message, object[] args)
+        {
+            return args == null || args.Length == 0 ? message : string.Format(message, args);
         }
 
         /// <summary>
@@ -338,15 +348,16 @@ namespace LiteDB
             return new LiteException(INVALID_PASSWORD, "Invalid password.");
         }
 
-        internal static LiteException AvoidUseOfProcess()
+        internal static LiteException IllegalDeserializationType(string typeName)
         {
-            return new LiteException(AVOID_USE_OF_PROCESS, $"LiteDB do not accept System.Diagnostics.Process class in deserialize mapper");
+            return new LiteException(ILLEGAL_DESERIALIZATION_TYPE, $"Illegal deserialization type: {typeName}");
         }
 
         internal static LiteException InvalidDatafileState(string message)
         {
             return new LiteException(INVALID_DATAFILE_STATE, message);
         }
+
         #endregion
     }
 }
