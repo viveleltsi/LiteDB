@@ -13,7 +13,8 @@ namespace LiteDB.Engine
     {
         /// <summary>
         /// Implement a full rebuild database. Engine will be closed and re-created in another instance.
-        /// A backup copy will be created with -backup extention. All data will be readed and re created in another database
+        /// Original data and log files are retained according to <see cref="RebuildOptions.CreateBackup"/>.
+        /// All data will be read and re-created in another database.
         /// After run, will re-open database
         /// </summary>
         public long Rebuild(RebuildOptions options)
@@ -37,7 +38,8 @@ namespace LiteDB.Engine
         }
 
         /// <summary>
-        /// Implement a full rebuild database. A backup copy will be created with -backup extention. All data will be readed and re created in another database
+        /// Implement a full rebuild database. The original data and log files are retained as backups.
+        /// All data will be read and re-created in another database.
         /// </summary>
         public long Rebuild()
         {

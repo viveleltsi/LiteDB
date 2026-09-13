@@ -87,12 +87,13 @@ namespace LiteDB.Engine
         public bool AutoRebuild { get; set; } = false;
 
         /// <summary>
-        /// Rebuild format v7 files before opening, retaining a backup. Ordinary v8 files remain compatible without migration.
+        /// Rebuild format v7 files before opening. Ordinary v8 files remain compatible without migration.
         /// </summary>
         public bool Upgrade { get; set; } = false;
 
         /// <summary>
-        /// If a upgrade is made a backup database is created.
+        /// Keep the original data and log files after a successful upgrade (default: true).
+        /// When false, backups are deleted only after replacement succeeds without reported errors.
         /// </summary>
         public bool CreateBackupOnUpgrade { get; set; } = true;
 

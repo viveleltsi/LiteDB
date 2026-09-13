@@ -18,6 +18,10 @@ namespace LiteDB.Engine
         private readonly EngineSettings _settings;
         private readonly int _fileVersion;
 
+#if DEBUG || TESTING
+        internal Action SimulateReplaceFail { get; set; }
+#endif
+
         public RebuildService(EngineSettings settings)
         {
             _settings = settings;
@@ -37,6 +41,11 @@ namespace LiteDB.Engine
             _fileVersion = FileReaderV8.IsVersion(buffer) ? 8 : throw LiteException.InvalidDatabase();
         }
 
+        /// <summary>
+        /// Rebuild the database and retain or delete the staged data and log backups according to the options.
+        /// </summary>
+        /// <param name="options">Rebuild behavior and destination settings.</param>
+        /// <returns>The number of bytes saved by the rebuild.</returns>
         public long Rebuild(RebuildOptions options)
         {
             var backupFilename = FileHelper.GetSuffixFile(_settings.Filename, "-backup", true);
@@ -102,6 +111,9 @@ namespace LiteDB.Engine
             });
 
             // rename temp file into filename
+#if DEBUG || TESTING
+            this.SimulateReplaceFail?.Invoke();
+#endif
             File.Move(tempFilename, _settings.Filename);
 
 
@@ -109,10 +121,12 @@ namespace LiteDB.Engine
             var diff = new FileInfo(backupFilename).Length -
                 new FileInfo(_settings.Filename).Length;
 
-            if (!options.CreateBackup)
+            // A rebuild with reported errors is partial. Keep the original files so
+            // callers can recover data that the rebuilt database could not import.
+            if (!options.CreateBackup && options.Errors.Count == 0)
             {
-                // Delete the backup file
                 File.Delete(backupFilename);
+                File.Delete(backupLogFilename);
             }
 
             return diff;
